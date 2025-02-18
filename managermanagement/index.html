@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<h1>User Management</h1>
+<h2>Add New User</h2>
+<form id="userForm">
+    <label for="username">Username:</label>
+    <input type="text" id="username" name="username" required>
+    <label for="displayname">Display Name:</label>
+    <input type="text" id="displayname" name="displayname" required>
+    <label for="phone">Phone:</label>
+    <input type="text" id="phone" name="phone" value="+90 " required>
+    <label for="customermail">Customer Mail:</label>
+    <input type="email" id="customermail" name="customermail" required>
+    <label for="role">Role:</label>
+    <select id="role" name="role" required>
+        <option value="admin">Admin</option>
+        <option value="superadmin">Superadmin</option>
+        <option value="guest">Guest</option>
+    </select>
+    <button type="submit">Add User</button>
+</form>
+
+<h2>Filter Employees</h2>
+<input type="checkbox" id="showDisabled"> Show Disabled Employees
+
+<h2>Users</h2>
+<table id="userTable">
+    <thead>
+    <tr>
+        <th>ID</th>
+        <th>Username</th>
+        <th>Display Name</th>
+        <th>Phone</th>
+        <th>Customer Mail</th>
+        <th>Role</th>
+        <th>Enabled</th>
+    </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+<button id="saveAllButton">Save All</button>
+<script>
+    const users = [];
+
+    document.getElementById('phone').addEventListener('input', function (e) {
+        let value = e.target.value.replace(/\D/g, ''); // Remove all non-digit characters
+        if (value.startsWith('90')) {
+            value = '+90 ' + value.slice(2, 12); // Allow only 10 digits after +90
+        } else {
+            value = '+90 ' + value.slice(0, 10); // Ensure the number starts with +90
+        }
+        e.target.value = value;
+    });
+
+    document.getElementById('userForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = document.getElementById('username').value;
+        const displayname = document.getElementById('displayname').value;
+        const phone = document.getElementById('phone').value;
+        const customermail = document.getElementById('customermail').value;
+        const role = document.getElementById('role').value;
+
+        if (isDuplicate(username, phone, customermail)) {
+            alert('Username, phone number, or email already exists.');
+            return;
+        }
+
+        try {
+            const response = await fetch('/employees', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, displayname, phone, customermail, role })
+            });
+
+            if (response.ok) {
+                const newUser = await response.json();
+                console.log('New user added:', newUser);
+                addUserToTable(newUser);
+                users.push(newUser);
+            } else {
+                console.error('Failed to add user');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    });
+
+    document.getElementById('showDisabled').addEventListener('change', function (e) {
+        loadUsers();
+    });
+
+    document.getElementById('saveAllButton').addEventListener('click', async () => {
+        await saveAllUsers();
+        // Send a GET request to refresh the page
+        window.location.reload();
+    });
+
+    function isDuplicate(username, phone, customermail) {
+        return users.some(user => user.username === username || user.phone === phone || user.customermail === customermail);
+    }
+
+    function addUserToTable(user) {
+        const userTable = document.getElementById('userTable').getElementsByTagName('tbody')[0];
+        const row = userTable.insertRow();
+        row.setAttribute('data-id', user.id);
+        row.insertCell(0).textContent = user.id;
+        row.insertCell(1).textContent = user.username;
+        row.insertCell(2).textContent = user.displayname;
+        row.insertCell(3).textContent = user.phone;
+        row.insertCell(4).textContent = user.customermail;
+        row.insertCell(5).textContent = user.role;
+        const enabledCell = row.insertCell(6);
+
+        const enabledSelect = document.createElement('select');
+
+        const trueOption = document.createElement('option');
+        trueOption.value = 'true';
+        trueOption.textContent = 'True';
+
+        const falseOption = document.createElement('option');
+        falseOption.value = 'false';
+        falseOption.textContent = 'False';
+
+        enabledSelect.appendChild(trueOption);
+        enabledSelect.appendChild(falseOption);
+
+        enabledSelect.value = user.enabled ? 'true' : 'false';
+        enabledSelect.addEventListener('change', () => {
+            user.enabled = enabledSelect.value === 'true';
+        });
+
+        enabledCell.appendChild(enabledSelect);
+    }
+
+    async function saveAllUsers() {
+        for (const user of users) {
+            const response = await fetch(`/employees/${user.id}/enabled`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: user.enabled })
+            });
+            if (response.ok) {
+                console.log(`User with ID ${user.id} updated to enabled: ${user.enabled}`);
+            } else {
+                console.error(`Failed to update user with ID ${user.id}`);
+            }
+        }
+    }
+
+    async function loadUsers() {
+        const response = await fetch('/employees');
+        const loadedUsers = await response.json();
+        const showDisabled = document.getElementById('showDisabled').checked;
+        const userList = document.getElementById('userTable').getElementsByTagName('tbody')[0];
+        userList.innerHTML = '';
+        users.length = 0;
+        loadedUsers.forEach(user => {
+            if (showDisabled || user.enabled) {
+                addUserToTable(user);
+                users.push(user);
+            }
+        });
+        console.log('Loaded users:', loadedUsers);
+    }
+
+    loadUsers();
+</script>
+<style>
+    .selected {
+        background-color: #f0f0f0;
+    }
+</style>
+</body>
+</html>
